@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Gestión - Consultorio de Rehabilitación</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom Config for Tailwind Colors -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        medical: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#095196',
+                            800: '#075985',
+                        },
+                        authorized: {
+                            bg: '#dcfce7',
+                            text: '#15803d',
+                            border: '#86efac'
+                        },
+                        pending: {
+                            bg: '#fef3c7',
+                            text: '#b45309',
+                            border: '#fde047'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Modern Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col">
+
+    <!-- TOP HEADER / NAVIGATION -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-wrap justify-between items-center min-h-16 gap-3 py-2">
+                <!-- Branding -->
+                <div class="flex items-center gap-2 sm:gap-3">
+                    <div class="flex items-center gap-1 sm:gap-2">
+                        <img src="DATA/POLI.png" alt="Policlínica San Rafael" class="h-8 sm:h-10 w-auto object-contain">
+                        <img src="DATA/REHACTIVA.png" alt="Rehactiva, Instituto Terapéutico de Rehabilitación" class="h-8 sm:h-10 w-auto object-contain">
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-base sm:text-lg leading-tight text-slate-900">AGENDA DE TURNOS PARA KINESIOLOGÍA</h1>
+                        <p class="text-[10px] sm:text-xs text-slate-500">Gestión de ART/SEGUROS Policlínica San Rafael</p>
+                    </div>
+                </div>
+
+                <!-- Navigation Tabs -->
+                <nav class="flex space-x-2 bg-slate-100 p-1 rounded-xl">
+                    <button id="tab-front-btn" onclick="switchTab('front')" class="px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-2 bg-white text-medical-700 shadow-sm">
+                        <i class="fa-solid fa-calendar-days"></i>
+                        <span>Agenda Semanal</span>
+                    </button>
+                    <button id="tab-back-btn" onclick="switchTab('back')" class="px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-2 text-slate-600 hover:text-slate-900">
+                        <i class="fa-solid fa-sliders"></i>
+                        <span>Panel Carga</span>
+                    </button>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <!-- NOTIFICATION ALERT CONTAINER -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+        <!-- ========================================== -->
+        <!-- VIEW 1: FRONT - AGENDA SEMANAL             -->
+        <!-- ========================================== -->
+        <section id="view-front" class="space-y-6">
+            
+            <!-- Controls Bar: Date navigation & Filters -->
+            <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex flex-wrap gap-4 items-center justify-between">
+                
+                <!-- Week Navigator -->
+                <div class="flex items-center gap-3">
+                    <button onclick="changeWeek(-1)" class="p-2 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 transition" title="Semana Anterior">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </button>
+                    <button onclick="goToCurrentWeek()" class="px-3 py-1.5 rounded-lg border border-slate-200 text-sm font-medium hover:bg-slate-100 text-slate-700">
+                        Hoy / Semana Actual
+                    </button>
+                    <button onclick="changeWeek(1)" class="p-2 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 transition" title="Semana Siguiente">
+                        <i class="fa-solid fa-chevron-right"></i>
+                    </button>
+                    <span id="current-week-label" class="text-base font-bold text-slate-800 ml-2">---</span>
+                </div>
+
+                <!-- Month Selector & Info -->
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2">
+                        <label for="month-picker" class="text-sm font-medium text-slate-600">Mes/Año:</label>
+                        <input type="month" id="month-picker" onchange="onMonthPickerChange(this.value)" class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none">
+                    </div>
+                    <!-- Status Legend -->
+                    <div class="hidden md:flex items-center gap-3 text-xs border-l border-slate-200 pl-4">
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
+                            <span class="text-slate-600 font-medium">Autorizado</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-3 h-3 rounded-full bg-amber-500 inline-block"></span>
+                            <span class="text-slate-600 font-medium">Pendiente</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-3 h-3 rounded-full bg-red-400 inline-block"></span>
+                            <span class="text-slate-600 font-medium">Feriado/Bloqueado</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Weekly Grid View -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse min-w-[1000px]">
+                        <thead>
+                            <tr class="bg-slate-100 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
+                                <th class="py-3 px-4 w-28 text-center border-r border-slate-200 bg-slate-200/60 sticky left-0 z-10">Horario</th>
+                                <th class="py-3 px-4 w-1/5 border-r border-slate-200" id="th-day-0">Lunes</th>
+                                <th class="py-3 px-4 w-1/5 border-r border-slate-200" id="th-day-1">Martes</th>
+                                <th class="py-3 px-4 w-1/5 border-r border-slate-200" id="th-day-2">Miércoles</th>
+                                <th class="py-3 px-4 w-1/5 border-r border-slate-200" id="th-day-3">Jueves</th>
+                                <th class="py-3 px-4 w-1/5" id="th-day-4">Viernes</th>
+                            </tr>
+                        </thead>
+                        <tbody id="agenda-grid-body" class="divide-y divide-slate-200 text-sm">
+                            <!-- JS Inject Rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- VIEW 2: BACK - GESTIÓN Y CARGA DE TURNOS   -->
+        <!-- ========================================== -->
+        <section id="view-back" class="hidden space-y-8">
+            
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                
+                <!-- Left Column: Patient Appointment Booking Form -->
+                <div class="lg:col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                    <div class="flex items-center gap-3 border-b border-slate-100 pb-4 mb-6">
+                        <div class="w-8 h-8 rounded-lg bg-medical-100 text-medical-600 flex items-center justify-center font-bold">
+                            <i class="fa-solid fa-user-plus"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-bold text-slate-900">Cargar Nuevo Tratamiento / Turno</h2>
+                            <p class="text-xs text-slate-500">Asigne el inicio del tratamiento. Se agendarán automáticamente las N sesiones en días hábiles consecutivamente.</p>
+                        </div>
+                    </div>
+
+                    <form id="booking-form" onsubmit="handleCreateBooking(event)" class="space-y-5">
+                        
+                        <!-- Patient Name -->
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Nombre y Apellido del Paciente *</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                                    <i class="fa-solid fa-user"></i>
+                                </span>
+                                <input type="text" id="patient-name" required placeholder="Ej: Maria Gonzalez" class="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-medical-500 focus:outline-none text-sm">
+                            </div>
+                        </div>
+
+                        <!-- Date, Time and Place Controls -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Fecha de Inicio *</label>
+                                <input type="date" id="start-date" required class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-medical-500 focus:outline-none text-sm">
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Horario Fijo *</label>
+                                <select id="time-slot" required class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-medical-500 focus:outline-none text-sm bg-white">
+                                    <optgroup label="Turno Mañana (08:00 - 12:00)">
+                                        <option value="08:00">08:00 Hs</option>
+                                        <option value="08:30">08:30 Hs</option>
+                                        <option value="09:00">09:00 Hs</option>
+                                        <option value="09:30">09:30 Hs</option>
+                                        <option value="10:00">10:00 Hs</option>
+                                        <option value="10:30">10:30 Hs</option>
+                                        <option value="11:00">11:00 Hs</option>
+                                        <option value="11:30">11:30 Hs</option>
+                                    </optgroup>
+                                    <optgroup label="Turno Tarde (15:30 - 19:30)">
+                                        <option value="15:30">15:30 Hs</option>
+                                        <option value="16:00">16:00 Hs</option>
+                                        <option value="16:30">16:30 Hs</option>
+                                        <option value="17:00">17:00 Hs</option>
+                                        <option value="17:30">17:30 Hs</option>
+                                        <option value="18:00">18:00 Hs</option>
+                                        <option value="18:30">18:30 Hs</option>
+                                        <option value="19:00">19:00 Hs</option>
+                                    </optgroup>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Turno / Lugar *</label>
+                                <select id="place-number" required class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-medical-500 focus:outline-none text-sm bg-white">
+                                    <option value="1">Turno 1</option>
+                                    <option value="2">Turno 2</option>
+                                    <option value="3">Turno 3</option>
+                                    <option value="4">Turno 4</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Sessions and Authorization -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                            <div>
+                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Cantidad de Sesiones *</label>
+                                <input type="number" id="sessions-count" min="1" max="60" value="10" required class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-medical-500 focus:outline-none text-sm">
+                                <p class="text-[11px] text-slate-400 mt-1">Se agendarán días automáticamente en días hábiles.</p>
+                            </div>
+
+                            <div class="flex items-center pt-5">
+                                <label class="relative flex items-center gap-3 cursor-pointer select-none">
+                                    <input type="checkbox" id="is-authorized" checked class="sr-only peer">
+                                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-400 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                                    <span class="text-sm font-semibold text-slate-700">Tratamiento Autorizado</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <div class="pt-4">
+                            <button type="submit" class="w-full bg-medical-600 hover:bg-medical-700 text-white font-bold py-3 px-6 rounded-xl transition shadow-md flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-calendar-check"></i>
+                                <span>Agendar tratamiento con autorización</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Right Column: Holiday / Day Blocking Panel -->
+                <div class="space-y-6">
+                    
+                    <!-- Holiday Lock Form -->
+                    <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                        <div class="flex items-center gap-3 border-b border-slate-100 pb-4 mb-4">
+                            <div class="w-8 h-8 rounded-lg bg-red-100 text-red-600 flex items-center justify-center font-bold">
+                                <i class="fa-solid fa-ban"></i>
+                            </div>
+                            <div>
+                                <h2 class="text-lg font-bold text-slate-900">Bloquear Día / Feriado</h2>
+                                <p class="text-xs text-slate-500">Inhabilita el día seleccionado completo.</p>
+                            </div>
+                        </div>
+
+                        <form onsubmit="handleBlockDay(event)" class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Fecha a Bloquear *</label>
+                                <input type="date" id="block-date" required class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-400 focus:outline-none text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Motivo / Descripción</label>
+                                <input type="text" id="block-reason" placeholder="Ej: Feriado Nacional / Capacitación" class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-400 focus:outline-none text-sm">
+                            </div>
+                            <button type="submit" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-semibold py-2.5 px-4 rounded-xl transition text-sm flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-lock"></i>
+                                <span>Bloquear Día</span>
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Blocked Days List -->
+                    <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                        <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider mb-3">Días Bloqueados Registrados</h3>
+                        <div id="blocked-days-list" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+                            <!-- JS Loaded Content -->
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Management Table: Registered Treatments / Appointments -->
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold text-slate-900">Listado de Pacientes & Turnos Agendados</h2>
+                    <span id="total-appointments-badge" class="px-3 py-1 bg-medical-50 text-medical-700 font-bold text-xs rounded-full border border-medical-100">0 turnos</span>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 text-xs uppercase text-slate-500 font-semibold border-b border-slate-200">
+                                <th class="py-3 px-4">Paciente</th>
+                                <th class="py-3 px-4">Fecha</th>
+                                <th class="py-3 px-4">Hora</th>
+                                <th class="py-3 px-4">Turno</th>
+                                <th class="py-3 px-4">Sesión</th>
+                                <th class="py-3 px-4">Estado</th>
+                                <th class="py-3 px-4 text-right">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="manage-appointments-tbody" class="divide-y divide-slate-100">
+                            <!-- JS Dynamic content -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- JAVASCRIPT APP LOGIC -->
+    <script>
+        // --- CONSTANTS & SLOTS DEFINITION ---
+        const MORNING_SLOTS = ["08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30"];
+        const AFTERNOON_SLOTS = ["15:30", "16:00", "16:30", "17:00", "17:30", "18:00", "18:30", "19:00"];
+        const ALL_SLOTS = [...MORNING_SLOTS, ...AFTERNOON_SLOTS];
+
+        // --- APP STATE ---
+        let currentWeekStartDate = getMonday(new Date());
+        let appointments = JSON.parse(localStorage.getItem('rehab_appointments')) || [];
+        let blockedDays = JSON.parse(localStorage.getItem('rehab_blocked_days')) || [];
+
+        // --- INIT ON LOAD ---
+        window.onload = function() {
+            // Set default date input to today
+            const todayStr = new Date().toISOString().split('T')[0];
+            document.getElementById('start-date').value = todayStr;
+            document.getElementById('block-date').value = todayStr;
+
+            updateMonthPickerUI();
+            renderAgendaGrid();
+            renderBlockedDaysList();
+            renderManageAppointmentsTable();
+        };
+
+        // --- STORAGE SAVERS ---
+        function saveAppointments() {
+            localStorage.setItem('rehab_appointments', JSON.stringify(appointments));
+            renderAgendaGrid();
+            renderManageAppointmentsTable();
+        }
+
+        function saveBlockedDays() {
+            localStorage.setItem('rehab_blocked_days', JSON.stringify(blockedDays));
+            renderAgendaGrid();
+            renderBlockedDaysList();
+        }
+
+        // --- TAB SWITCHING LOGIC ---
+        function switchTab(tabName) {
+            const frontView = document.getElementById('view-front');
+            const backView = document.getElementById('view-back');
+            const frontBtn = document.getElementById('tab-front-btn');
+            const backBtn = document.getElementById('tab-back-btn');
+
+            if (tabName === 'front') {
+                frontView.classList.remove('hidden');
+                backView.classList.add('hidden');
+                frontBtn.className = "px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-2 bg-white text-medical-700 shadow-sm";
+                backBtn.className = "px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-2 text-slate-600 hover:text-slate-900";
+                renderAgendaGrid();
+            } else {
+                frontView.classList.add('hidden');
+                backView.classList.remove('hidden');
+                backBtn.className = "px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-2 bg-white text-medical-700 shadow-sm";
+                frontBtn.className = "px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-2 text-slate-600 hover:text-slate-900";
+            }
+        }
+
+        // --- DATE & WEEK HELPER FUNCTIONS ---
+        function getMonday(d) {
+            const date = new Date(d);
+            const day = date.getDay();
+            const diff = date.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+            const monday = new Date(date.setDate(diff));
+            monday.setHours(0,0,0,0);
+            return monday;
+        }
+
+        function formatISO(date) {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        function isWeekend(date) {
+            const day = date.getDay();
+            return day === 0 || day === 6; // Sunday = 0, Saturday = 6
+        }
+
+        function isDayBlocked(dateStr) {
+            return blockedDays.some(b => b.date === dateStr);
+        }
+
+        function getBlockedReason(dateStr) {
+            const found = blockedDays.find(b => b.date === dateStr);
+            return found ? found.reason : 'BLOQUEADO';
+        }
+
+        // --- NAVIGATION CONTROLS ---
+        function changeWeek(offsetWeeks) {
+            currentWeekStartDate.setDate(currentWeekStartDate.getDate() + (offsetWeeks * 7));
+            updateMonthPickerUI();
+            renderAgendaGrid();
+        }
+
+        function goToCurrentWeek() {
+            currentWeekStartDate = getMonday(new Date());
+            updateMonthPickerUI();
+            renderAgendaGrid();
+        }
+
+        function onMonthPickerChange(value) {
+            if (!value) return;
+            const [year, month] = value.split('-');
+            const firstOfMonth = new Date(parseInt(year), parseInt(month) - 1, 1);
+            currentWeekStartDate = getMonday(firstOfMonth);
+            renderAgendaGrid();
+        }
+
+        function updateMonthPickerUI() {
+            const y = currentWeekStartDate.getFullYear();
+            const m = String(currentWeekStartDate.getMonth() + 1).padStart(2, '0');
+            document.getElementById('month-picker').value = `${y}-${m}`;
+        }
+
+        // --- RENDER FRONT AGENDA GRID ---
+        function renderAgendaGrid() {
+            const tbody = document.getElementById('agenda-grid-body');
+            tbody.innerHTML = '';
+
+            // Calculate dates for Monday to Friday
+            const weekDays = [];
+            for (let i = 0; i < 5; i++) {
+                const dayDate = new Date(currentWeekStartDate);
+                dayDate.setDate(dayDate.getDate() + i);
+                weekDays.push(dayDate);
+            }
+
+            // Update Table Headers
+            const dayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+            weekDays.forEach((date, index) => {
+                const th = document.getElementById(`th-day-${index}`);
+                const dateFormatted = `${date.getDate()}/${date.getMonth() + 1}`;
+                const dateStr = formatISO(date);
+                const isBlocked = isDayBlocked(dateStr);
+                
+                th.innerHTML = `
+                    <div class="flex flex-col items-center">
+                        <span class="text-slate-500 font-semibold">${dayNames[index]}</span>
+                        <span class="text-sm font-bold text-slate-800">${dateFormatted}</span>
+                        ${isBlocked ? `<span class="text-[10px] bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded mt-1">BLOQUEADO</span>` : ''}
+                    </div>
+                `;
+            });
+
+            // Update Current Week Label Header
+            const startStr = `${weekDays[0].getDate()} ${weekDays[0].toLocaleString('es-ES', { month: 'short' })}`;
+            const endStr = `${weekDays[4].getDate()} ${weekDays[4].toLocaleString('es-ES', { month: 'short' })} ${weekDays[4].getFullYear()}`;
+            document.getElementById('current-week-label').innerText = `Semana: ${startStr} - ${endStr}`;
+
+            // Build Rows for each Time Slot
+            ALL_SLOTS.forEach((slot, slotIdx) => {
+                const tr = document.createElement('tr');
+                
+                // Add separator styling between morning and afternoon shift
+                if (slot === "15:30") {
+                    const shiftDivider = document.createElement('tr');
+                    shiftDivider.className = "bg-slate-200 text-slate-700 text-xs font-bold text-center";
+                    shiftDivider.innerHTML = `<td colspan="6" class="py-2 tracking-wider uppercase bg-slate-200">--- TURNO TARDE ---</td>`;
+                    tbody.appendChild(shiftDivider);
+                }
+
+                // Time Column
+                let rowHTML = `
+                    <td class="py-2 px-2 text-center font-bold text-slate-700 border-r border-slate-200 bg-slate-50 sticky left-0 z-10 text-xs">
+                        ${slot} hs
+                    </td>
+                `;
+
+                // Columns for Monday to Friday
+                weekDays.forEach(dayDate => {
+                    const dateStr = formatISO(dayDate);
+                    const isBlocked = isDayBlocked(dateStr);
+
+                    if (isBlocked) {
+                        rowHTML += `
+                            <td class="p-1.5 border-r border-slate-200 bg-red-50/50 align-top">
+                                <div class="h-full min-h-[54px] rounded-lg border border-dashed border-red-200 p-1 flex items-center justify-center text-center">
+                                    <span class="text-[10px] font-bold text-red-400 uppercase tracking-tight">Feriado / Sin atención</span>
+                                </div>
+                            </td>
+                        `;
+                    } else {
+                        // Find appointments for this date and time slot
+                        const slotAppointments = appointments.filter(a => a.date === dateStr && a.time === slot);
+
+                        rowHTML += `
+                            <td class="p-1.5 border-r border-slate-200 align-top">
+                                <div class="grid grid-cols-2 gap-1 min-h-[54px]">
+                        `;
+
+                        // Render 4 Places / Turnos
+                        for (let p = 1; p <= 4; p++) {
+                            const appt = slotAppointments.find(a => Number(a.place) === p);
+
+                            if (appt) {
+                                // Occupied Slot
+                                const isAuth = appt.isAuthorized;
+                                const styleClasses = isAuth 
+                                    ? 'bg-emerald-50 border-emerald-300 text-emerald-900' 
+                                    : 'bg-amber-50 border-amber-300 text-amber-900';
+                                
+                                const badgeColor = isAuth ? 'bg-emerald-600 text-white' : 'bg-amber-600 text-white';
+
+                                rowHTML += `
+                                    <div class="rounded-md border p-1 ${styleClasses} shadow-sm flex flex-col justify-between text-left transition hover:shadow-md" title="Turno ${p}: ${appt.patientName}">
+                                        <div class="flex items-center justify-between gap-1">
+                                            <span class="text-[9px] font-bold px-1 rounded ${badgeColor}">C${p}</span>
+                                            <span class="text-[9px] font-bold text-slate-500">${appt.sessionIndex}/${appt.totalSessions}</span>
+                                        </div>
+                                        <div class="font-bold text-[11px] leading-tight truncate mt-0.5" title="${appt.patientName}">
+                                            ${appt.patientName}
+                                        </div>
+                                    </div>
+                                `;
+                            } else {
+                                // Empty / Free Slot
+                                rowHTML += `
+                                    <div class="rounded-md border border-slate-100 bg-slate-50/50 p-1 flex items-center justify-between opacity-60 hover:opacity-100 hover:border-slate-300 transition cursor-pointer" onclick="quickSelectSlot('${dateStr}', '${slot}', ${p})" title="Turno ${p} Libre">
+                                        <span class="text-[9px] font-semibold text-slate-400">C${p}</span>
+                                        <span class="text-[9px] text-slate-300 font-medium">Libre</span>
+                                    </div>
+                                `;
+                            }
+                        }
+
+                        rowHTML += `
+                                </div>
+                            </td>
+                        `;
+                    }
+                });
+
+                tr.innerHTML = rowHTML;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Quick shortcut to jump to Back panel with prefilled slot
+        function quickSelectSlot(dateStr, timeSlot, placeNum) {
+            document.getElementById('start-date').value = dateStr;
+            document.getElementById('time-slot').value = timeSlot;
+            document.getElementById('place-number').value = placeNum;
+            switchTab('back');
+            showToast(`Turno ${placeNum} el ${dateStr} a las ${timeSlot}hs seleccionado`, 'info');
+        }
+
+        // --- BACK PANEL LOGIC: CREATE BOOKINGS ---
+        function handleCreateBooking(event) {
+            event.preventDefault();
+
+            const patientName = document.getElementById('patient-name').value.trim();
+            const startDateStr = document.getElementById('start-date').value;
+            const timeSlot = document.getElementById('time-slot').value;
+            const placeNum = Number(document.getElementById('place-number').value);
+            const totalSessions = Number(document.getElementById('sessions-count').value);
+            const isAuthorized = document.getElementById('is-authorized').checked;
+
+            if (!patientName || !startDateStr || !timeSlot || !placeNum || !totalSessions) {
+                showToast('Por favor, complete todos los campos obligatorios.', 'error');
+                return;
+            }
+
+            // Calculate N business days
+            const newAppointments = [];
+            const conflicts = [];
+            
+            let currentDate = new Date(startDateStr + 'T00:00:00');
+            let sessionCounter = 1;
+            const treatmentGroupId = 'TRAT-' + Date.now();
+
+            while (sessionCounter <= totalSessions) {
+                const dateStr = formatISO(currentDate);
+
+                // Skip weekends and blocked holiday days
+                if (!isWeekend(currentDate) && !isDayBlocked(dateStr)) {
+                    
+                    // Check if slot & place is ALREADY OCCUPIED
+                    const exists = appointments.some(a => a.date === dateStr && a.time === timeSlot && Number(a.place) === placeNum);
+
+                    if (exists) {
+                        conflicts.push(`Fecha ${dateStr} a las ${timeSlot}hs (Turno ${placeNum})`);
+                    } else {
+                        newAppointments.push({
+                            id: 'APT-' + Math.random().toString(36).substr(2, 9),
+                            groupId: treatmentGroupId,
+                            patientName: patientName,
+                            date: dateStr,
+                            time: timeSlot,
+                            place: placeNum,
+                            sessionIndex: sessionCounter,
+                            totalSessions: totalSessions,
+                            isAuthorized: isAuthorized
+                        });
+                    }
+                    sessionCounter++;
+                }
+
+                // Advance to next calendar day
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+
+            // If conflicts found, reject entire booking or warn user
+            if (conflicts.length > 0) {
+                showToast(`No se puede agendar. Se encontraron ${conflicts.length} ocupaciones en el turno ${placeNum}: <br>• ${conflicts.slice(0,3).join('<br>• ')}${conflicts.length > 3 ? '<br>...' : ''}`, 'error');
+                return;
+            }
+
+            // Commit new appointments
+            appointments = [...appointments, ...newAppointments];
+            saveAppointments();
+
+            showToast(`¡Tratamiento de ${totalSessions} sesiones agendado exitosamente para ${patientName}!`, 'success');
+            
+            // Reset form
+            document.getElementById('patient-name').value = '';
+            switchTab('front');
+        }
+
+        // --- BLOCK / UNBLOCK DAYS ---
+        function handleBlockDay(event) {
+            event.preventDefault();
+            const dateStr = document.getElementById('block-date').value;
+            const reason = document.getElementById('block-reason').value.trim() || 'Feriado / No Atiende';
+
+            if (!dateStr) return;
+
+            // Check if already blocked
+            if (isDayBlocked(dateStr)) {
+                showToast('Este día ya se encuentra bloqueado.', 'error');
+                return;
+            }
+
+            // Add to blocked days
+            blockedDays.push({ date: dateStr, reason: reason });
+            saveBlockedDays();
+
+            document.getElementById('block-reason').value = '';
+            showToast(`Día ${dateStr} bloqueado correctamente.`, 'success');
+        }
+
+        function unblockDay(dateStr) {
+            blockedDays = blockedDays.filter(b => b.date !== dateStr);
+            saveBlockedDays();
+            showToast(`Día ${dateStr} desbloqueado.`, 'info');
+        }
+
+        function renderBlockedDaysList() {
+            const container = document.getElementById('blocked-days-list');
+            container.innerHTML = '';
+
+            if (blockedDays.length === 0) {
+                container.innerHTML = `<p class="text-xs text-slate-400 italic">No hay días bloqueados cargados.</p>`;
+                return;
+            }
+
+            // Sort by date ascending
+            const sorted = [...blockedDays].sort((a,b) => a.date.localeCompare(b.date));
+
+            sorted.forEach(b => {
+                const div = document.createElement('div');
+                div.className = "flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-200 text-xs";
+                div.innerHTML = `
+                    <div>
+                        <span class="font-bold text-slate-800">${b.date}</span>
+                        <span class="text-slate-500 ml-2">(${b.reason})</span>
+                    </div>
+                    <button onclick="unblockDay('${b.date}')" class="text-red-500 hover:text-red-700 p-1" title="Eliminar bloqueo">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // --- MANAGE APPOINTMENTS TABLE (BACK) ---
+        function renderManageAppointmentsTable() {
+            const tbody = document.getElementById('manage-appointments-tbody');
+            const badge = document.getElementById('total-appointments-badge');
+            tbody.innerHTML = '';
+
+            badge.innerText = `${appointments.length} turnos registrados`;
+
+            if (appointments.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="py-6 text-center text-slate-400 text-xs italic">
+                            No hay turnos agendados en el sistema.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            // Sort appointments by date & time
+            const sorted = [...appointments].sort((a, b) => {
+                if (a.date !== b.date) return a.date.localeCompare(b.date);
+                return a.time.localeCompare(b.time);
+            });
+
+            sorted.forEach(appt => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition";
+                
+                const statusBadge = appt.isAuthorized 
+                    ? `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">Autorizado</span>`
+                    : `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">Pendiente</span>`;
+
+                tr.innerHTML = `
+                    <td class="py-2.5 px-4 font-bold text-slate-800">${appt.patientName}</td>
+                    <td class="py-2.5 px-4 text-slate-600">${appt.date}</td>
+                    <td class="py-2.5 px-4 font-semibold text-slate-700">${appt.time} hs</td>
+                    <td class="py-2.5 px-4 text-slate-600">Turno ${appt.place}</td>
+                    <td class="py-2.5 px-4 font-bold text-slate-500">${appt.sessionIndex} de ${appt.totalSessions}</td>
+                    <td class="py-2.5 px-4">${statusBadge}</td>
+                    <td class="py-2.5 px-4 text-right space-x-2">
+                        <button onclick="toggleAuthorization('${appt.id}')" class="text-xs px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium">
+                            ${appt.isAuthorized ? 'Marcar Pendiente' : 'Autorizar'}
+                        </button>
+                        <button onclick="deleteAppointment('${appt.id}')" class="text-xs px-2 py-1 rounded bg-red-50 hover:bg-red-100 text-red-600 font-medium">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function toggleAuthorization(apptId) {
+            appointments = appointments.map(a => {
+                if (a.id === apptId) {
+                    return { ...a, isAuthorized: !a.isAuthorized };
+                }
+                return a;
+            });
+            saveAppointments();
+            showToast('Estado de autorización actualizado.', 'info');
+        }
+
+        function deleteAppointment(apptId) {
+            appointments = appointments.filter(a => a.id !== apptId);
+            saveAppointments();
+            showToast('Turno eliminado.', 'info');
+        }
+
+        // --- TOAST NOTIFICATIONS HELPER ---
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let bgClasses = 'bg-slate-800 text-white';
+            if (type === 'success') bgClasses = 'bg-emerald-700 text-white shadow-lg';
+            if (type === 'error') bgClasses = 'bg-red-600 text-white shadow-lg';
+            if (type === 'info') bgClasses = 'bg-medical-700 text-white shadow-lg';
+
+            toast.className = `px-4 py-3 rounded-xl ${bgClasses} text-sm font-medium transition-all transform duration-300 pointer-events-auto flex items-center gap-2 max-w-md border border-white/10 shadow-xl`;
+            toast.innerHTML = `
+                <span>${message}</span>
+            `;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+    </script>
+</body>
+</html>
