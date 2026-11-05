@@ -26,8 +26,8 @@
                     <i class="fa-solid fa-heart-pulse text-xl"></i>
                 </div>
                 <div>
-                    <h1 class="font-bold text-lg leading-tight">REHACTIVA</h1>
-                    <p class="text-xs text-slate-400">Dpto. ART Policlínica San Rafael</p>
+                    <h1 class="font-bold text-lg leading-tight">REHACTIVA - CENTRO TERAPÉUTICO DE REHABILITACIÓN</h1>
+                    <p class="text-xs text-slate-400">DPTO ART POLICLÍNICA SAN RAFAEL</p>
                 </div>
             </div>
 
@@ -232,9 +232,9 @@
     <!-- Firebase y Lógica Integrada -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-        import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+        import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
-        // CREDENCIALES REALES DE FIREBASE INYECTADAS
+        // CREDENCIALES REALES DE FIREBASE
         const firebaseConfig = {
             apiKey: "AIzaSyBLIY462R3cndVQ390Ts24KtlS0bwj4aVk",
             authDomain: "kinesio-72a1b.firebaseapp.com",
@@ -269,7 +269,7 @@
                 renderGrid();
                 renderTablaBack();
             }, (error) => {
-                console.error("Error al escuchar turnos (revisar reglas de Firestore):", error);
+                console.error("Error al escuchar turnos:", error);
             });
 
             onSnapshot(collection(db, "feriados"), (snapshot) => {
@@ -277,7 +277,7 @@
                 renderGrid();
                 renderFeriadosBack();
             }, (error) => {
-                console.error("Error al escuchar feriados (revisar reglas de Firestore):", error);
+                console.error("Error al escuchar feriados:", error);
             });
         });
 
@@ -498,7 +498,19 @@
                 initSelectHorarios();
             } catch (error) {
                 console.error("Error al guardar turnos:", error);
-                alert("Hubo un error al agendar los turnos. Verifica las reglas de seguridad de Firestore en Firebase Console.");
+                alert("Hubo un error al agendar los turnos.");
+            }
+        };
+
+        window.toggleAutorizado = async function(id, estadoActual) {
+            try {
+                const turnoRef = doc(db, "turnos", id);
+                await updateDoc(turnoRef, {
+                    autorizado: !estadoActual
+                });
+            } catch (error) {
+                console.error("Error al actualizar estado:", error);
+                alert("No se pudo actualizar el estado del turno.");
             }
         };
 
@@ -581,13 +593,15 @@
                     <td class="py-2 px-3 font-medium text-slate-900">${t.paciente} <span class="text-[10px] text-slate-400">(${t.numSesion}/${t.totalSesiones})</span></td>
                     <td class="py-2 px-3">Lugar ${t.camilla}</td>
                     <td class="py-2 px-3">
-                        ${t.autorizado 
-                            ? '<span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">Autorizado</span>'
-                            : '<span class="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full">Pendiente</span>'
-                        }
+                        <button onclick="toggleAutorizado('${t.id}', ${t.autorizado})" class="transition hover:opacity-80">
+                            ${t.autorizado 
+                                ? '<span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-1 rounded-full inline-flex items-center gap-1"><i class="fa-solid fa-check"></i> Autorizado</span>'
+                                : '<span class="bg-amber-100 text-amber-800 text-[10px] font-bold px-2.5 py-1 rounded-full inline-flex items-center gap-1"><i class="fa-solid fa-clock"></i> Pendiente (Clic para autorizar)</span>'
+                            }
+                        </button>
                     </td>
                     <td class="py-2 px-3 text-right">
-                        <button onclick="borrarTurno('${t.id}')" class="text-rose-500 hover:text-rose-700 p-1">
+                        <button onclick="borrarTurno('${t.id}')" class="text-rose-500 hover:text-rose-700 p-1" title="Eliminar Turno">
                             <i class="fa-solid fa-trash-can"></i>
                         </button>
                     </td>
