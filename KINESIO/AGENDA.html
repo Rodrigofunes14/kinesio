@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AGENDA DE KINESIOLOGIA</title>
+    <title>Gestión de Rehabilitación</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome Logos/Icons -->
@@ -26,8 +26,8 @@
                     <i class="fa-solid fa-heart-pulse text-xl"></i>
                 </div>
                 <div>
-                    <h1 class="font-bold text-lg leading-tight">REHACTIVA - Instituto Terapéutico de Rehabilitación</h1>
-                    <p class="text-xs text-slate-400">Dpto ART - Policlínica San Rafael</p>
+                    <h1 class="font-bold text-lg leading-tight">REHACTIVA</h1>
+                    <p class="text-xs text-slate-400">Dpto. ART Policlínica San Rafael</p>
                 </div>
             </div>
 
@@ -234,15 +234,15 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
         import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
-        // CONFIGURA AQUÍ TUS CREDENCIALES DE FIREBASE
-       const firebaseConfig = {
-  apiKey: "AIzaSyBLIY462R3cndVQ390Ts24KtlS0bwj4aVk",
-  authDomain: "kinesio-72a1b.firebaseapp.com",
-  projectId: "kinesio-72a1b",
-  storageBucket: "kinesio-72a1b.firebasestorage.app",
-  messagingSenderId: "3801506277",
-  appId: "1:3801506277:web:52a16603fd1d06ef280f0c"
-};
+        // CREDENCIALES REALES DE FIREBASE INYECTADAS
+        const firebaseConfig = {
+            apiKey: "AIzaSyBLIY462R3cndVQ390Ts24KtlS0bwj4aVk",
+            authDomain: "kinesio-72a1b.firebaseapp.com",
+            projectId: "kinesio-72a1b",
+            storageBucket: "kinesio-72a1b.firebasestorage.app",
+            messagingSenderId: "3801506277",
+            appId: "1:3801506277:web:52a16603fd1d06ef280f0c"
+        };
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
@@ -268,12 +268,16 @@
                 turnosGlobales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 renderGrid();
                 renderTablaBack();
+            }, (error) => {
+                console.error("Error al escuchar turnos (revisar reglas de Firestore):", error);
             });
 
             onSnapshot(collection(db, "feriados"), (snapshot) => {
                 feriadosGlobales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 renderGrid();
                 renderFeriadosBack();
+            }, (error) => {
+                console.error("Error al escuchar feriados (revisar reglas de Firestore):", error);
             });
         });
 
@@ -494,7 +498,7 @@
                 initSelectHorarios();
             } catch (error) {
                 console.error("Error al guardar turnos:", error);
-                alert("Hubo un error al agendar los turnos. Revisa la consola o las reglas de Firebase.");
+                alert("Hubo un error al agendar los turnos. Verifica las reglas de seguridad de Firestore en Firebase Console.");
             }
         };
 
