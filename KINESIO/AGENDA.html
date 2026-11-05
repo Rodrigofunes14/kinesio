@@ -64,8 +64,8 @@
                 <!-- Branding -->
                 <div class="flex items-center gap-2 sm:gap-3">
                     <div class="flex items-center gap-1 sm:gap-2">
-                        <img src="DATA/POLI.png" alt="Policlínica San Rafael" class="h-11 sm:h-13 w-auto object-contain">
-                        <img src="DATA/REHACTIVA.png" alt="Rehactiva, Instituto Terapéutico de Rehabilitación" class="h-11 sm:h-13 w-auto object-contain">
+                        <img src="DATA/POLI.png" alt="Policlínica San Rafael" class="h-15 sm:h-17 w-auto object-contain">
+                        <img src="DATA/REHACTIVA.png" alt="Rehactiva, Instituto Terapéutico de Rehabilitación" class="h-15 sm:h-17 w-auto object-contain">
                     </div>
                     <div>
                         <h1 class="font-bold text-base sm:text-lg leading-tight text-slate-900">AGENDA DE TURNOS PARA KINESIOLOGÍA</h1>
@@ -337,21 +337,100 @@
 
     </main>
 
-    <!-- JAVASCRIPT APP LOGIC -->
-    <script>
+  <!-- FIREBASE MODULE & INTEGRATION SCRIPT -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, deleteDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
         // --- CONSTANTS & SLOTS DEFINITION ---
         const MORNING_SLOTS = ["08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30"];
         const AFTERNOON_SLOTS = ["15:30", "16:00", "16:30", "17:00", "17:30", "18:00", "18:30", "19:00"];
         const ALL_SLOTS = [...MORNING_SLOTS, ...AFTERNOON_SLOTS];
 
+        // --- FIREBASE INITIALIZATION & AUTH ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'rehab-consultorio-app';
+        
+        // Demo/Fallback configuration for standalone hosting (GitHub Pages)
+        const defaultFirebaseConfig = {
+            apiKey: "AIzaSyDemoConfigKeyForRehabControlApp",
+            authDomain: "rehab-control-app.firebaseapp.com",
+            projectId: "rehab-control-app",
+            storageBucket: "rehab-control-app.appspot.com",
+            messagingSenderId: "1234567890",
+            appId: "1:1234567890:web:abcdef123456"
+        };
+
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : defaultFirebaseConfig;
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // App Collections Paths (RULE 1)
+        const APPOINTMENTS_COLLECTION = collection(db, 'artifacts', appId, 'public', 'data', 'appointments');
+        const BLOCKED_DAYS_COLLECTION = collection(db, 'artifacts', appId, 'public', 'data', 'blocked_days');
+
         // --- APP STATE ---
         let currentWeekStartDate = getMonday(new Date());
-        let appointments = JSON.parse(localStorage.getItem('rehab_appointments')) || [];
-        let blockedDays = JSON.parse(localStorage.getItem('rehab_blocked_days')) || [];
+        let appointments = [];
+        let blockedDays = [];
+        let currentUser = null;
 
-        // --- INIT ON LOAD ---
-        window.onload = function() {
-            // Set default date input to today
+        // Authenticate User & Listen for Firestore Realtime Updates
+        async function initAuthAndFirestore() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.warn("Auth initialization fallback to anonymous", err);
+                try { await signInAnonymously(auth); } catch (e) { console.error(e); }
+            }
+
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    currentUser = user;
+                    setupRealtimeListeners();
+                }
+            });
+        }
+
+        // REALTIME LISTENERS (RULE 2 & Error Callbacks)
+        function setupRealtimeListeners() {
+            if (!currentUser) return;
+
+            // Listen to Appointments Collection
+            onSnapshot(APPOINTMENTS_COLLECTION, (snapshot) => {
+                appointments = snapshot.docs.map(docSnap => ({
+                    id: docSnap.id,
+                    ...docSnap.data()
+                }));
+                renderAgendaGrid();
+                renderManageAppointmentsTable();
+            }, (error) => {
+                console.error("Firestore Appointments Sync Error:", error);
+            });
+
+            // Listen to Blocked Days Collection
+            onSnapshot(BLOCKED_DAYS_COLLECTION, (snapshot) => {
+                blockedDays = snapshot.docs.map(docSnap => ({
+                    id: docSnap.id,
+                    ...docSnap.data()
+                }));
+                renderAgendaGrid();
+                renderBlockedDaysList();
+            }, (error) => {
+                console.error("Firestore Blocked Days Sync Error:", error);
+            });
+        }
+
+        // Initial setup on window load
+        window.addEventListener('DOMContentLoaded', () => {
             const todayStr = new Date().toISOString().split('T')[0];
             document.getElementById('start-date').value = todayStr;
             document.getElementById('block-date').value = todayStr;
@@ -360,23 +439,12 @@
             renderAgendaGrid();
             renderBlockedDaysList();
             renderManageAppointmentsTable();
-        };
 
-        // --- STORAGE SAVERS ---
-        function saveAppointments() {
-            localStorage.setItem('rehab_appointments', JSON.stringify(appointments));
-            renderAgendaGrid();
-            renderManageAppointmentsTable();
-        }
+            initAuthAndFirestore();
+        });
 
-        function saveBlockedDays() {
-            localStorage.setItem('rehab_blocked_days', JSON.stringify(blockedDays));
-            renderAgendaGrid();
-            renderBlockedDaysList();
-        }
-
-        // --- TAB SWITCHING LOGIC ---
-        function switchTab(tabName) {
+        // --- GLOBAL EXPORTS FOR HTML ONCLICK ATTRS ---
+        window.switchTab = function(tabName) {
             const frontView = document.getElementById('view-front');
             const backView = document.getElementById('view-back');
             const frontBtn = document.getElementById('tab-front-btn');
@@ -394,13 +462,41 @@
                 backBtn.className = "px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-2 bg-white text-medical-700 shadow-sm";
                 frontBtn.className = "px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-2 text-slate-600 hover:text-slate-900";
             }
-        }
+        };
 
-        // --- DATE & WEEK HELPER FUNCTIONS ---
+        window.changeWeek = function(offsetWeeks) {
+            currentWeekStartDate.setDate(currentWeekStartDate.getDate() + (offsetWeeks * 7));
+            updateMonthPickerUI();
+            renderAgendaGrid();
+        };
+
+        window.goToCurrentWeek = function() {
+            currentWeekStartDate = getMonday(new Date());
+            updateMonthPickerUI();
+            renderAgendaGrid();
+        };
+
+        window.onMonthPickerChange = function(value) {
+            if (!value) return;
+            const [year, month] = value.split('-');
+            const firstOfMonth = new Date(parseInt(year), parseInt(month) - 1, 1);
+            currentWeekStartDate = getMonday(firstOfMonth);
+            renderAgendaGrid();
+        };
+
+        window.quickSelectSlot = function(dateStr, timeSlot, placeNum) {
+            document.getElementById('start-date').value = dateStr;
+            document.getElementById('time-slot').value = timeSlot;
+            document.getElementById('place-number').value = placeNum;
+            window.switchTab('back');
+            showToast(`Camilla ${placeNum} el ${dateStr} a las ${timeSlot}hs seleccionada`, 'info');
+        };
+
+        // --- DATE HELPER FUNCTIONS ---
         function getMonday(d) {
             const date = new Date(d);
             const day = date.getDay();
-            const diff = date.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+            const diff = date.getDate() - day + (day === 0 ? -6 : 1);
             const monday = new Date(date.setDate(diff));
             monday.setHours(0,0,0,0);
             return monday;
@@ -415,37 +511,11 @@
 
         function isWeekend(date) {
             const day = date.getDay();
-            return day === 0 || day === 6; // Sunday = 0, Saturday = 6
+            return day === 0 || day === 6;
         }
 
         function isDayBlocked(dateStr) {
             return blockedDays.some(b => b.date === dateStr);
-        }
-
-        function getBlockedReason(dateStr) {
-            const found = blockedDays.find(b => b.date === dateStr);
-            return found ? found.reason : 'BLOQUEADO';
-        }
-
-        // --- NAVIGATION CONTROLS ---
-        function changeWeek(offsetWeeks) {
-            currentWeekStartDate.setDate(currentWeekStartDate.getDate() + (offsetWeeks * 7));
-            updateMonthPickerUI();
-            renderAgendaGrid();
-        }
-
-        function goToCurrentWeek() {
-            currentWeekStartDate = getMonday(new Date());
-            updateMonthPickerUI();
-            renderAgendaGrid();
-        }
-
-        function onMonthPickerChange(value) {
-            if (!value) return;
-            const [year, month] = value.split('-');
-            const firstOfMonth = new Date(parseInt(year), parseInt(month) - 1, 1);
-            currentWeekStartDate = getMonday(firstOfMonth);
-            renderAgendaGrid();
         }
 
         function updateMonthPickerUI() {
@@ -457,9 +527,9 @@
         // --- RENDER FRONT AGENDA GRID ---
         function renderAgendaGrid() {
             const tbody = document.getElementById('agenda-grid-body');
+            if (!tbody) return;
             tbody.innerHTML = '';
 
-            // Calculate dates for Monday to Friday
             const weekDays = [];
             for (let i = 0; i < 5; i++) {
                 const dayDate = new Date(currentWeekStartDate);
@@ -467,10 +537,10 @@
                 weekDays.push(dayDate);
             }
 
-            // Update Table Headers
             const dayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
             weekDays.forEach((date, index) => {
                 const th = document.getElementById(`th-day-${index}`);
+                if (!th) return;
                 const dateFormatted = `${date.getDate()}/${date.getMonth() + 1}`;
                 const dateStr = formatISO(date);
                 const isBlocked = isDayBlocked(dateStr);
@@ -484,16 +554,13 @@
                 `;
             });
 
-            // Update Current Week Label Header
             const startStr = `${weekDays[0].getDate()} ${weekDays[0].toLocaleString('es-ES', { month: 'short' })}`;
             const endStr = `${weekDays[4].getDate()} ${weekDays[4].toLocaleString('es-ES', { month: 'short' })} ${weekDays[4].getFullYear()}`;
             document.getElementById('current-week-label').innerText = `Semana: ${startStr} - ${endStr}`;
 
-            // Build Rows for each Time Slot
-            ALL_SLOTS.forEach((slot, slotIdx) => {
+            ALL_SLOTS.forEach((slot) => {
                 const tr = document.createElement('tr');
                 
-                // Add separator styling between morning and afternoon shift
                 if (slot === "15:30") {
                     const shiftDivider = document.createElement('tr');
                     shiftDivider.className = "bg-slate-200 text-slate-700 text-xs font-bold text-center";
@@ -501,14 +568,12 @@
                     tbody.appendChild(shiftDivider);
                 }
 
-                // Time Column
                 let rowHTML = `
                     <td class="py-2 px-2 text-center font-bold text-slate-700 border-r border-slate-200 bg-slate-50 sticky left-0 z-10 text-xs">
                         ${slot} hs
                     </td>
                 `;
 
-                // Columns for Monday to Friday
                 weekDays.forEach(dayDate => {
                     const dateStr = formatISO(dayDate);
                     const isBlocked = isDayBlocked(dateStr);
@@ -522,7 +587,6 @@
                             </td>
                         `;
                     } else {
-                        // Find appointments for this date and time slot
                         const slotAppointments = appointments.filter(a => a.date === dateStr && a.time === slot);
 
                         rowHTML += `
@@ -530,12 +594,10 @@
                                 <div class="grid grid-cols-2 gap-1 min-h-[54px]">
                         `;
 
-                        // Render 4 Places / Turnos
                         for (let p = 1; p <= 4; p++) {
                             const appt = slotAppointments.find(a => Number(a.place) === p);
 
                             if (appt) {
-                                // Occupied Slot
                                 const isAuth = appt.isAuthorized;
                                 const styleClasses = isAuth 
                                     ? 'bg-emerald-50 border-emerald-300 text-emerald-900' 
@@ -544,7 +606,7 @@
                                 const badgeColor = isAuth ? 'bg-emerald-600 text-white' : 'bg-amber-600 text-white';
 
                                 rowHTML += `
-                                    <div class="rounded-md border p-1 ${styleClasses} shadow-sm flex flex-col justify-between text-left transition hover:shadow-md" title="Turno ${p}: ${appt.patientName}">
+                                    <div class="rounded-md border p-1 ${styleClasses} shadow-sm flex flex-col justify-between text-left transition hover:shadow-md" title="Camilla ${p}: ${appt.patientName}">
                                         <div class="flex items-center justify-between gap-1">
                                             <span class="text-[9px] font-bold px-1 rounded ${badgeColor}">C${p}</span>
                                             <span class="text-[9px] font-bold text-slate-500">${appt.sessionIndex}/${appt.totalSessions}</span>
@@ -555,9 +617,8 @@
                                     </div>
                                 `;
                             } else {
-                                // Empty / Free Slot
                                 rowHTML += `
-                                    <div class="rounded-md border border-slate-100 bg-slate-50/50 p-1 flex items-center justify-between opacity-60 hover:opacity-100 hover:border-slate-300 transition cursor-pointer" onclick="quickSelectSlot('${dateStr}', '${slot}', ${p})" title="Turno ${p} Libre">
+                                    <div class="rounded-md border border-slate-100 bg-slate-50/50 p-1 flex items-center justify-between opacity-60 hover:opacity-100 hover:border-slate-300 transition cursor-pointer" onclick="quickSelectSlot('${dateStr}', '${slot}', ${p})" title="Camilla ${p} Libre">
                                         <span class="text-[9px] font-semibold text-slate-400">C${p}</span>
                                         <span class="text-[9px] text-slate-300 font-medium">Libre</span>
                                     </div>
@@ -577,18 +638,14 @@
             });
         }
 
-        // Quick shortcut to jump to Back panel with prefilled slot
-        function quickSelectSlot(dateStr, timeSlot, placeNum) {
-            document.getElementById('start-date').value = dateStr;
-            document.getElementById('time-slot').value = timeSlot;
-            document.getElementById('place-number').value = placeNum;
-            switchTab('back');
-            showToast(`Turno ${placeNum} el ${dateStr} a las ${timeSlot}hs seleccionado`, 'info');
-        }
-
-        // --- BACK PANEL LOGIC: CREATE BOOKINGS ---
-        function handleCreateBooking(event) {
+        // --- BACK PANEL LOGIC: CREATE BOOKINGS IN FIRESTORE ---
+        window.handleCreateBooking = async function(event) {
             event.preventDefault();
+
+            if (!auth.currentUser) {
+                showToast('Conectando a la base de datos... intente de nuevo en un segundo.', 'error');
+                return;
+            }
 
             const patientName = document.getElementById('patient-name').value.trim();
             const startDateStr = document.getElementById('start-date').value;
@@ -602,7 +659,6 @@
                 return;
             }
 
-            // Calculate N business days
             const newAppointments = [];
             const conflicts = [];
             
@@ -613,17 +669,15 @@
             while (sessionCounter <= totalSessions) {
                 const dateStr = formatISO(currentDate);
 
-                // Skip weekends and blocked holiday days
                 if (!isWeekend(currentDate) && !isDayBlocked(dateStr)) {
-                    
-                    // Check if slot & place is ALREADY OCCUPIED
                     const exists = appointments.some(a => a.date === dateStr && a.time === timeSlot && Number(a.place) === placeNum);
 
                     if (exists) {
-                        conflicts.push(`Fecha ${dateStr} a las ${timeSlot}hs (Turno ${placeNum})`);
+                        conflicts.push(`Fecha ${dateStr} a las ${timeSlot}hs (Camilla ${placeNum})`);
                     } else {
+                        const apptId = 'APT-' + Math.random().toString(36).substr(2, 9);
                         newAppointments.push({
-                            id: 'APT-' + Math.random().toString(36).substr(2, 9),
+                            id: apptId,
                             groupId: treatmentGroupId,
                             patientName: patientName,
                             date: dateStr,
@@ -631,63 +685,84 @@
                             place: placeNum,
                             sessionIndex: sessionCounter,
                             totalSessions: totalSessions,
-                            isAuthorized: isAuthorized
+                            isAuthorized: isAuthorized,
+                            createdAt: new Date().toISOString()
                         });
                     }
                     sessionCounter++;
                 }
 
-                // Advance to next calendar day
                 currentDate.setDate(currentDate.getDate() + 1);
             }
 
-            // If conflicts found, reject entire booking or warn user
             if (conflicts.length > 0) {
-                showToast(`No se puede agendar. Se encontraron ${conflicts.length} ocupaciones en el turno ${placeNum}: <br>• ${conflicts.slice(0,3).join('<br>• ')}${conflicts.length > 3 ? '<br>...' : ''}`, 'error');
+                showToast(`No se puede agendar. Se encontraron ${conflicts.length} ocupaciones en la camilla ${placeNum}: <br>• ${conflicts.slice(0,3).join('<br>• ')}${conflicts.length > 3 ? '<br>...' : ''}`, 'error');
                 return;
             }
 
-            // Commit new appointments
-            appointments = [...appointments, ...newAppointments];
-            saveAppointments();
+            // Save all sessions to Firestore
+            try {
+                for (const appt of newAppointments) {
+                    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'appointments', appt.id);
+                    await setDoc(docRef, appt);
+                }
+                showToast(`¡Tratamiento de ${totalSessions} sesiones agendado en tiempo real para ${patientName}!`, 'success');
+                document.getElementById('patient-name').value = '';
+                window.switchTab('front');
+            } catch (err) {
+                console.error("Error guardando turnos:", err);
+                showToast('Error al conectar con la base de datos.', 'error');
+            }
+        };
 
-            showToast(`¡Tratamiento de ${totalSessions} sesiones agendado exitosamente para ${patientName}!`, 'success');
-            
-            // Reset form
-            document.getElementById('patient-name').value = '';
-            switchTab('front');
-        }
-
-        // --- BLOCK / UNBLOCK DAYS ---
-        function handleBlockDay(event) {
+        // --- BLOCK / UNBLOCK DAYS IN FIRESTORE ---
+        window.handleBlockDay = async function(event) {
             event.preventDefault();
+            if (!auth.currentUser) return;
+
             const dateStr = document.getElementById('block-date').value;
             const reason = document.getElementById('block-reason').value.trim() || 'Feriado / No Atiende';
 
             if (!dateStr) return;
 
-            // Check if already blocked
             if (isDayBlocked(dateStr)) {
                 showToast('Este día ya se encuentra bloqueado.', 'error');
                 return;
             }
 
-            // Add to blocked days
-            blockedDays.push({ date: dateStr, reason: reason });
-            saveBlockedDays();
+            try {
+                const blockId = 'BLK-' + dateStr;
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'blocked_days', blockId);
+                await setDoc(docRef, {
+                    id: blockId,
+                    date: dateStr,
+                    reason: reason,
+                    createdAt: new Date().toISOString()
+                });
 
-            document.getElementById('block-reason').value = '';
-            showToast(`Día ${dateStr} bloqueado correctamente.`, 'success');
-        }
+                document.getElementById('block-reason').value = '';
+                showToast(`Día ${dateStr} bloqueado en la nube.`, 'success');
+            } catch (err) {
+                console.error("Error al bloquear día:", err);
+                showToast('Error al guardar el bloqueo.', 'error');
+            }
+        };
 
-        function unblockDay(dateStr) {
-            blockedDays = blockedDays.filter(b => b.date !== dateStr);
-            saveBlockedDays();
-            showToast(`Día ${dateStr} desbloqueado.`, 'info');
-        }
+        window.unblockDay = async function(dateStr) {
+            if (!auth.currentUser) return;
+            try {
+                const blockId = 'BLK-' + dateStr;
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'blocked_days', blockId);
+                await deleteDoc(docRef);
+                showToast(`Día ${dateStr} desbloqueado.`, 'info');
+            } catch (err) {
+                console.error("Error al desbloquear día:", err);
+            }
+        };
 
         function renderBlockedDaysList() {
             const container = document.getElementById('blocked-days-list');
+            if (!container) return;
             container.innerHTML = '';
 
             if (blockedDays.length === 0) {
@@ -695,7 +770,6 @@
                 return;
             }
 
-            // Sort by date ascending
             const sorted = [...blockedDays].sort((a,b) => a.date.localeCompare(b.date));
 
             sorted.forEach(b => {
@@ -718,6 +792,7 @@
         function renderManageAppointmentsTable() {
             const tbody = document.getElementById('manage-appointments-tbody');
             const badge = document.getElementById('total-appointments-badge');
+            if (!tbody || !badge) return;
             tbody.innerHTML = '';
 
             badge.innerText = `${appointments.length} turnos registrados`;
@@ -726,14 +801,13 @@
                 tbody.innerHTML = `
                     <tr>
                         <td colspan="7" class="py-6 text-center text-slate-400 text-xs italic">
-                            No hay turnos agendados en el sistema.
+                            No hay turnos agendados en la base de datos.
                         </td>
                     </tr>
                 `;
                 return;
             }
 
-            // Sort appointments by date & time
             const sorted = [...appointments].sort((a, b) => {
                 if (a.date !== b.date) return a.date.localeCompare(b.date);
                 return a.time.localeCompare(b.time);
@@ -751,7 +825,7 @@
                     <td class="py-2.5 px-4 font-bold text-slate-800">${appt.patientName}</td>
                     <td class="py-2.5 px-4 text-slate-600">${appt.date}</td>
                     <td class="py-2.5 px-4 font-semibold text-slate-700">${appt.time} hs</td>
-                    <td class="py-2.5 px-4 text-slate-600">Turno ${appt.place}</td>
+                    <td class="py-2.5 px-4 text-slate-600">Camilla ${appt.place}</td>
                     <td class="py-2.5 px-4 font-bold text-slate-500">${appt.sessionIndex} de ${appt.totalSessions}</td>
                     <td class="py-2.5 px-4">${statusBadge}</td>
                     <td class="py-2.5 px-4 text-right space-x-2">
@@ -767,26 +841,35 @@
             });
         }
 
-        function toggleAuthorization(apptId) {
-            appointments = appointments.map(a => {
-                if (a.id === apptId) {
-                    return { ...a, isAuthorized: !a.isAuthorized };
-                }
-                return a;
-            });
-            saveAppointments();
-            showToast('Estado de autorización actualizado.', 'info');
-        }
+        window.toggleAuthorization = async function(apptId) {
+            if (!auth.currentUser) return;
+            const appt = appointments.find(a => a.id === apptId);
+            if (!appt) return;
 
-        function deleteAppointment(apptId) {
-            appointments = appointments.filter(a => a.id !== apptId);
-            saveAppointments();
-            showToast('Turno eliminado.', 'info');
-        }
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'appointments', apptId);
+                await updateDoc(docRef, { isAuthorized: !appt.isAuthorized });
+                showToast('Estado de autorización actualizado.', 'info');
+            } catch (err) {
+                console.error("Error al actualizar:", err);
+            }
+        };
+
+        window.deleteAppointment = async function(apptId) {
+            if (!auth.currentUser) return;
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'appointments', apptId);
+                await deleteDoc(docRef);
+                showToast('Turno eliminado.', 'info');
+            } catch (err) {
+                console.error("Error al eliminar turno:", err);
+            }
+        };
 
         // --- TOAST NOTIFICATIONS HELPER ---
         function showToast(message, type = 'info') {
             const container = document.getElementById('toast-container');
+            if (!container) return;
             const toast = document.createElement('div');
             
             let bgClasses = 'bg-slate-800 text-white';
@@ -795,9 +878,7 @@
             if (type === 'info') bgClasses = 'bg-medical-700 text-white shadow-lg';
 
             toast.className = `px-4 py-3 rounded-xl ${bgClasses} text-sm font-medium transition-all transform duration-300 pointer-events-auto flex items-center gap-2 max-w-md border border-white/10 shadow-xl`;
-            toast.innerHTML = `
-                <span>${message}</span>
-            `;
+            toast.innerHTML = `<span>${message}</span>`;
 
             container.appendChild(toast);
 
